@@ -1,3 +1,4 @@
+# escape=`
 FROM golang:1.9-windowsservercore
 
 ENV chocolateyUseWindowsCompression false
@@ -14,3 +15,4 @@ RUN choco install openssh
 RUN go build -i -o c:\gopath\bin\buildkite-agent github.com\buildkite\agent
 
 CMD ["c:\gopath\bin\buildkite-agent", "start"]
+

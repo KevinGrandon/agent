@@ -6,7 +6,7 @@ steps:
         run: agent
 
   - name: ":hammer: :windows:"
-    command: "scripts/tests.bat"
+    command: "docker-compose -f docker-compose.windows.yml run agent scripts/tests.bat"
     agents:
       queue: "windows"
 

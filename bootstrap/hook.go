@@ -127,5 +127,8 @@ func (h *hookScriptWrapper) ChangedEnvironment() (*env.Environment, error) {
 	beforeEnv := env.FromExport(string(beforeEnvContents))
 	afterEnv := env.FromExport(string(afterEnvContents))
 
+	// This status isn't needed outside this hook environment and it leaks on windows
+	_ = afterEnv.Remove(`BUILDKITE_LAST_HOOK_EXIT_STATUS`)
+
 	return afterEnv.Diff(beforeEnv), nil
 }

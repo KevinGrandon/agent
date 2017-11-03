@@ -1,18 +1,25 @@
-# escape=`
-FROM golang:1.9-windowsservercore
+FROM microsoft/windowsservercore:latest   
 
-ENV chocolateyUseWindowsCompression false
+#ENV chocolateyVersion 0.10.3
+ENV ChocolateyUseWindowsCompression false
 
-COPY . c:/gopath/src/github.com/buildkite/agent
+# Set your PowerShell execution policy
+RUN powershell Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Force
 
-WORKDIR c:\\gopath\\src\\github.com\\buildkite\\agent
+# Install Chocolatey
+RUN powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 
-RUN powershell -Command \
-    iex ((new-object net.webclient).DownloadString('https://chocolatey.org/install.ps1')) 
+# Install Chocolatey packages
+RUN choco install -y git.install -params '"/GitAndUnixToolsOnPath"' && \
+  choco install -y openssh && \
+  choco install -y golang
 
-RUN choco install openssh
+# Copy across the agent source
+ENV GOPATH=c:/gopath
+WORKDIR c:/gopath/src/github.com/buildkite/agent
+COPY . .
 
-RUN go build -i -o c:\gopath\bin\buildkite-agent github.com\buildkite\agent
+# Build agent
+RUN go build -v -i -o c:/gopath/bin/buildkite-agent
 
-CMD ["c:\gopath\bin\buildkite-agent", "start"]
-
+CMD ["c:/gopath/bin/buildkite-agent", "start"]

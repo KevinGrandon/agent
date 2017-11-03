@@ -20,6 +20,6 @@ WORKDIR c:/gopath/src/github.com/buildkite/agent
 COPY . .
 
 # Build agent
-RUN go build -v -i -o c:/gopath/bin/buildkite-agent
+RUN go build -v -i -o c:/gopath/bin/buildkite-agent.exe
 
-CMD ["c:/gopath/bin/buildkite-agent", "start"]
+CMD ["c:/gopath/bin/buildkite-agent.exe", "start"]

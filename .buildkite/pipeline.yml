@@ -8,7 +8,7 @@ steps:
   - name: ":hammer: :windows:"
     command: "docker-compose -f docker-compose.windows.yml run agent .\\scripts\\tests.bat"
     agents:
-      queue: "windows"
+      queue: "windows-lox"
 
   - wait
 

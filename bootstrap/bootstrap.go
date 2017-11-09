@@ -139,25 +139,25 @@ func (b *Bootstrap) executeHook(name string, hookPath string, extraEnviron *env.
 		return errors.Wrapf(err, "The %s hook exited with an error", name)
 	}
 
-	// Get changed environment
-	changes, err := script.ChangedEnvironment()
+	// Get changed environent
+	changes, err := script.Changes()
 	if err != nil {
 		return errors.Wrapf(err, "Failed to get environment")
 	}
 
 	// Finally, apply changes to the current shell and config
-	b.applyEnvironmentChanges(changes)
+	b.applyEnvironmentChanges(changes.Env, changes.Dir)
 	return nil
 }
 
-func (b *Bootstrap) applyEnvironmentChanges(environ *env.Environment) {
-	// `environ` shouldn't ever be `nil`, but we'll just be cautious and guard against it.
-	if environ == nil {
-		return
+func (b *Bootstrap) applyEnvironmentChanges(environ *env.Environment, dir string) {
+	if dir != "" {
+		b.shell.Commentf("Applying working directory change: %s", dir)
+		_ = b.shell.Chdir(dir)
 	}
 
 	// Do we even have any environment variables to change?
-	if environ.Length() > 0 {
+	if environ != nil && environ.Length() > 0 {
 		// First, let see any of the environment variables are supposed
 		// to change the bootstrap configuration at run time.
 		bootstrapConfigEnvChanges := b.Config.ReadFromEnvironment(environ)
@@ -485,16 +485,27 @@ func (b *Bootstrap) CheckoutPhase() error {
 	if err := b.executePluginHook("pre-checkout"); err != nil {
 		return err
 	}
+  
+  checkoutPath, _ := b.shell.Env.Get("BUILDKITE_BUILD_CHECKOUT_PATH")
 
-	checkoutPath, _ := b.shell.Env.Get("BUILDKITE_BUILD_CHECKOUT_PATH")
+	var removeCheckoutDir = func() error {
+		b.shell.Commentf("Removing %s",checkoutPath)
+		if err := os.RemoveAll(checkoutPath); err != nil {
+			return fmt.Errorf("Failed to remove \"%s\" (%s)", checkoutPath, err)
+		}
+		return nil
+	}
+
+	var createCheckoutDir = func() error {
+		b.shell.Commentf("Creating \"%s\"", checkoutPath)
+		return os.MkdirAll(checkoutPath, 0777)
+	}
 
 	// Remove the checkout directory if BUILDKITE_CLEAN_CHECKOUT is present
 	if b.CleanCheckout {
 		b.shell.Headerf("Cleaning pipeline checkout")
-		b.shell.Commentf("Removing %s", checkoutPath)
-
-		if err := os.RemoveAll(checkoutPath); err != nil {
-			return fmt.Errorf("Failed to remove \"%s\" (%s)", checkoutPath, err)
+		if err := removeCheckoutDir(); err != nil {
+			return err
 		}
 	}
 
@@ -502,15 +513,25 @@ func (b *Bootstrap) CheckoutPhase() error {
 
 	// Create the build directory
 	if !fileExists(checkoutPath) {
-		b.shell.Commentf("Creating \"%s\"", checkoutPath)
-		if err := os.MkdirAll(checkoutPath, 0777); err != nil {
-			return fmt.Errorf("Failed to create \"%s\" (%s)", checkoutPath, err)
+		if err := createCheckoutDir(); err != nil {
+			return err
 		}
 	}
 
 	// Change to the new build checkout path
 	if err := b.shell.Chdir(checkoutPath); err != nil {
 		return err
+	}
+
+	// Check if the checkout is working, sometimes we get broken git checkouts if there was a previous failure
+	if _, err := gitRevParse(b.shell); err != nil {
+		b.shell.Commentf("Previous checkout seems to be an invalid git repository, deleting and re-creating")
+		if err := removeCheckoutDir(); err != nil {
+			return err
+		}
+		if err := createCheckoutDir(); err != nil {
+			return err
+		}
 	}
 
 	// There can only be one checkout hook, either plugin or global, in that order
@@ -525,6 +546,11 @@ func (b *Bootstrap) CheckoutPhase() error {
 		}
 	default:
 		if err := b.defaultCheckoutPhase(); err != nil {
+			// Just to be certain, if we aren't in debug mode, let's nuke the checkout directory
+			// so that a partial checkout doesn't poison future builds
+			if !b.Debug {
+				_ = removeCheckoutDir()
+			}
 			return err
 		}
 	}
